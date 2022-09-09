@@ -9,14 +9,18 @@ import com.example.backend.service.UserService;
 import com.example.backend.utils.JwtTokenUtil;
 import com.example.backend.utils.Result;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.validation.Valid;
 import java.util.List;
 import java.util.Optional;
 
 @RestController
 @RequestMapping("/message")
+@Validated
 public class MessageController {
     @Autowired
     UserService userService;
@@ -39,19 +43,14 @@ public class MessageController {
     }
 
     @PostMapping
-    public Result<Message> insertOne(@RequestBody MessageRequest message, HttpServletRequest request) throws LoginException {
+    public Result<Message> insertOne(@RequestBody @Valid MessageRequest message, BindingResult result, HttpServletRequest request) throws LoginException {
         String username = jwtTokenUtil.getUsernameFromRequest(request);
         Optional<User> optionalUser = userService.findOne(username);
         if(optionalUser.isPresent()) {
             User user = optionalUser.get();
             Long userid = user.getId();
-            Message insertMessage = new Message(null, user.getId(), user.getName(), message.getBody(), null);
+            Message insertMessage = new Message(null, userid, user.getName(), message.getBody(), null);
             return Result.Ok("insert ok", messageService.insertOne(insertMessage));
-//            if(!(message.getUserid().equals(userid) && message.getUsername().equals(username))) {
-//                throw new MessageArgumentException("id and name not match");
-//            } else {
-//                return Result.Ok("insert ok", messageService.insertOne(message));
-//            }
         } else {
             throw new LoginException("in MessageController: no such user");
         }

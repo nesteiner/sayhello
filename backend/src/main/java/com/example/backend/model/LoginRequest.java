@@ -1,4 +1,4 @@
-package com.example.backend.utils;
+package com.example.backend.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -14,11 +14,11 @@ import java.io.Serializable;
 public class LoginRequest implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    @NotBlank(message = "username cannot be empty")
+    @NotBlank(message = "username cannot be blank")
     @Length(min = 5, message = "username length must greater than 5")
     String username;
 
-    @NotBlank(message = "password cannot be empty")
+    @NotBlank(message = "password cannot be blank")
     @Length(min = 8, message = "password length must greater than 8")
     String password;
 }

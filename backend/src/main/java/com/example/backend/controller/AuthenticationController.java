@@ -2,7 +2,7 @@ package com.example.backend.controller;
 
 import com.example.backend.exception.LoginException;
 import com.example.backend.utils.JwtTokenUtil;
-import com.example.backend.utils.LoginRequest;
+import com.example.backend.model.LoginRequest;
 import com.example.backend.utils.LoginResponse;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
