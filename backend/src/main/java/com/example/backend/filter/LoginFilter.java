@@ -62,7 +62,7 @@ public class LoginFilter extends OncePerRequestFilter {
                 response.getWriter().write(json);
                 return;
             } finally {
-                response.setHeader("Access-Control-ALlow-Origin", "*");
+//                response.setHeader("Access-Control-ALlow-Origin", "*");
             }
         } else if (requestTokenHeader != null){
             log.warn("jwt token does not begin with bearer string");
@@ -71,7 +71,7 @@ public class LoginFilter extends OncePerRequestFilter {
             node.put("message", "in LoginFilter: jwt token parse error");
             String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
             response.setStatus(400);
-            response.setHeader("Access-Control-ALlow-Origin", "*");
+//            response.setHeader("Access-Control-ALlow-Origin", "*");
             response.getWriter().write(json);
             return;
         }

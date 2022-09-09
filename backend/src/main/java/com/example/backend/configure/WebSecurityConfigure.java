@@ -1,6 +1,7 @@
 package com.example.backend.configure;
 
 import com.example.backend.filter.AuthenticationFilter;
+import com.example.backend.filter.CorsFilter;
 import com.example.backend.filter.LoginFilter;
 import com.example.backend.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,11 +28,12 @@ public class WebSecurityConfigure extends WebSecurityConfigurerAdapter {
     JwtAuthenticationEntryPoint entryPoint;
     @Autowired
     UserService userService;
-
     @Autowired
     LoginFilter loginFilter;
     @Autowired
     AuthenticationFilter authenticateFilter;
+    @Autowired
+    CorsFilter corsFilter;
 
     @Autowired
     public void configureGlobal(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
@@ -66,6 +68,7 @@ public class WebSecurityConfigure extends WebSecurityConfigurerAdapter {
         // http.addFilterBefore(requestFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(loginFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterAt(authenticateFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(corsFilter, LoginFilter.class);
     }
 
 
