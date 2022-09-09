@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_frontend/api/login.dart';
 import 'package:flutter_frontend/page/homepage.dart';
@@ -44,13 +45,33 @@ class LoginPage extends StatelessWidget {
           return ElevatedButton(
             child: Text("Login"),
             onPressed: () async {
-              final token = await login(username: usernameController.text, password: passwordController.text);
-              await state.setToken(token);
-              usernameController.text = "";
-              passwordController.text = "";
+              try {
+                final token = await login(username: usernameController.text,
+                    password: passwordController.text);
+                await state.setToken(token);
 
-              // Navigator.of(context).pushNamed("home");
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => HomePage()));
+                // Navigator.of(context).pushNamed("home");
+                Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => HomePage()));
+              } on DioError catch (error) {
+                await showDialog(context: context, builder: (context) {
+                  return AlertDialog(
+                    title: Text("错误发生"),
+                    content: Text(error.response!.data["message"]),
+                    actions: [
+                      TextButton(
+                        child: Text("确认"),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        }
+                      )
+                    ],
+                  );
+                });
+              } finally {
+                usernameController.text = "";
+                passwordController.text = "";
+              }
             },
           );
         })
