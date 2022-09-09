@@ -14,13 +14,18 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.validation.Valid;
+
 
 @RestController
 @Slf4j
+@Validated
 public class AuthenticationController {
     @Autowired
     AuthenticationManager authenticationManager;
@@ -30,7 +35,7 @@ public class AuthenticationController {
     UserDetailsService userDetailsService;
 
     @PostMapping("/authenticate")
-    public ResponseEntity<?> createToken(@RequestBody LoginRequest request) throws LoginException {
+    public ResponseEntity<?> createToken(@RequestBody @Valid LoginRequest request, BindingResult result) throws LoginException {
         authenticate(request.getUsername(), request.getPassword());
         UserDetails userDetails = userDetailsService.loadUserByUsername(request.getUsername());
         String token = jwtTokenUtil.generateToken(userDetails);

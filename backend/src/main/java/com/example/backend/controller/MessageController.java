@@ -1,8 +1,6 @@
 package com.example.backend.controller;
 
-import ch.qos.logback.core.LogbackException;
 import com.example.backend.exception.LoginException;
-import com.example.backend.exception.MessageArgumentException;
 import com.example.backend.model.Message;
 import com.example.backend.model.MessageRequest;
 import com.example.backend.model.User;
