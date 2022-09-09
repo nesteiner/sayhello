@@ -1,0 +1,409 @@
+#+title: Sayhello with jwt 用户登录
+
+* 说明
+这次的项目参考自 Hello Flask 的 *SayHello* 项目
+
+#+DOWNLOADED: screenshot @ 2022-09-09 20:57:21
+[[file:images/说明/2022-09-09_20-57-21_screenshot.png]]
+不过我修改了一点
+- 添加了 jwt token 验证
+- 使用 springboot 作为后端
+- 使用 vue 作为前端
+- 使用 flutter 作为前端
+
+#+DOWNLOADED: screenshot @ 2022-09-09 21:00:21
+[[file:images/说明/2022-09-09_21-00-21_screenshot.png]]
+
+#+DOWNLOADED: screenshot @ 2022-09-09 20:59:28
+[[file:images/说明/2022-09-09_20-59-28_screenshot.png]]
+
+* 后端工作流程
+** CORS
+#+begin_src java
+  @Configuration
+  public class CorsConfigure {
+      @Bean
+      public CorsFilter corsFilter() {
+          UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+          CorsConfiguration corsConfiguration = new CorsConfiguration();
+          corsConfiguration.addAllowedOrigin("*");
+          corsConfiguration.addAllowedHeader("*");
+          corsConfiguration.addAllowedMethod("*");
+          source.registerCorsConfiguration("/**", corsConfiguration);
+          return new CorsFilter(source);
+      }
+  }
+
+#+end_src
+** 登录流程 LoginFilter
+#+begin_src java
+  @Slf4j
+  @Component
+  public class LoginFilter extends OncePerRequestFilter {
+      @Autowired
+      JwtTokenUtil jwtTokenUtil;
+
+      @Override
+      protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+          response.setContentType("application/json; charset=utf-8");
+          final String requestTokenHeader = request.getHeader("Authorization");
+          String username = null, jwtToken = null;
+          ObjectMapper mapper = new ObjectMapper();
+          // enter request logic
+          if(requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+              jwtToken = requestTokenHeader.substring(7);
+              try {
+                  username = jwtTokenUtil.getUsernameFromToken(jwtToken);
+                  request.setAttribute("username", username);
+                  request.setAttribute("jwtToken", jwtToken);
+              } catch (IllegalArgumentException exception) {
+                  log.error("unable to get jwt token");
+                  ObjectNode node = mapper.createObjectNode();
+                  node.put("status", "access failed");
+                  node.put("message", "in LoginFilter: unable to get jwt token");
+                  String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+                  response.setStatus(401);
+                  response.getWriter().write(json);
+                  return;
+              } catch (ExpiredJwtException exception) {
+                  log.error("jwt token has been expired");
+                  ObjectNode node = mapper.createObjectNode();
+                  node.put("status", "access failed");
+                  node.put("message", "in LoginFilter: jwt token has been expired");
+                  String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+                  response.setStatus(401);
+                  response.getWriter().write(json);
+                  return;
+              } catch (Exception exception) {
+                  log.error("unknown error");
+                  ObjectNode node = mapper.createObjectNode();
+                  node.put("status", "access failed");
+                  node.put("message", "in LoginFilter: jwt token parse error");
+                  String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+                  response.setStatus(400);
+                  response.getWriter().write(json);
+                  return;
+              } finally {
+                  response.setHeader("Access-Control-ALlow-Origin", "*");
+              }
+          } else if (requestTokenHeader != null){
+              log.warn("jwt token does not begin with bearer string");
+              ObjectNode node = mapper.createObjectNode();
+              node.put("status", "access failed");
+              node.put("message", "in LoginFilter: jwt token parse error");
+              String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+              response.setStatus(400);
+              response.setHeader("Access-Control-ALlow-Origin", "*");
+              response.getWriter().write(json);
+              return;
+          }
+
+          filterChain.doFilter(request, response);
+      }
+  }
+
+#+end_src
+
+代码中首先处理了有 =token= 的情况
+- =token= 不为空，且 =token= 以 =Bearer空格= 开头
+- =token= 不为空，且 =token= 不以 =Bearer空格= 开头
+又处理了无 =token= 时的情况
+- 默认是直接 =filterChain.doFilter(request, response);=
+如果是无 =token= 访问 =controller= 怎么办？
+在 =JwtTokenUtil= 中有一个解析函数，解析 =request= 时会抛出错误
+#+begin_src java
+  public String getUsernameFromRequest(HttpServletRequest request) throws LoginException {
+      String requestToken = request.getHeader("Authorization");
+      if(requestToken == null || requestToken.equals("")) {
+          throw new LoginException("no token found");
+      }
+
+      String token = requestToken.replace("Bearer ", "");
+      return getUsernameFromToken(token);
+  }
+#+end_src
+** 授权流程 AuthenticateFilter
+#+begin_src java
+  @RestController
+  @Slf4j
+  public class AuthenticationController {
+      @Autowired
+      AuthenticationManager authenticationManager;
+      @Autowired
+      JwtTokenUtil jwtTokenUtil;
+      @Autowired
+      UserDetailsService userDetailsService;
+
+      @PostMapping("/authenticate")
+      public ResponseEntity<?> createToken(@RequestBody LoginRequest request) throws LoginException {
+          authenticate(request.getUsername(), request.getPassword());
+          UserDetails userDetails = userDetailsService.loadUserByUsername(request.getUsername());
+          String token = jwtTokenUtil.generateToken(userDetails);
+          return ResponseEntity.ok(new LoginResponse(token));
+      }
+
+      void authenticate(@NonNull String username, @NonNull String password) throws LoginException {
+          try {
+              authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+          } catch (DisabledException exception) {
+              throw new LoginException("user diabled");
+          } catch (BadCredentialsException exception) { // this is for catching UsernameNotfoundException
+              throw new LoginException("in AuthenticationController: no such user or password error");
+          }
+      }
+
+  }
+
+#+end_src
+
+代码中，
+- 调用 =authenticate= ，如果没有错误发生，接着下一步，如果有，抛出 =LoginExpection= 错误交给全局错误处理器处理
+- 找到对应 =User= ，如果没有，抛出 =UsernameNotfoundException= 错误
+- 生成 =token=
+- 数据返回给前端
+
+其中 =UsernameNotfoundException= 交给 =JwtAuthenticationEntryPoint= 处理
+#+begin_src java
+  @Component
+  public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+      @Override
+      public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException {
+          response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+          response.setContentType("application/json; charset=utf-8");
+          ObjectMapper mapper = new ObjectMapper();
+          ObjectNode node = mapper.createObjectNode();
+          node.put("status", "access failed");
+          node.put("message", "in JwtAuthenticationEntryPoint: " + authException.getMessage());
+          String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+          response.getWriter().write(json);
+      }
+  }
+
+#+end_src
+** 全局错误处理
+全局错误处理为了处理 =LoginExpection=
+#+begin_src java
+  @RestControllerAdvice
+  public class GlobalExceptionHandler {
+      @ExceptionHandler(LoginException.class)
+      @ResponseStatus(HttpStatus.UNAUTHORIZED)
+      public Result<String> handleException(LoginException exception) {
+          String message = exception.getMessage();
+          return Result.Err(message);
+      }
+  }
+
+#+end_src
+** 数据表
+项目中有两个数据表，一是 =User= ，二是 =Message=
+*** 配置
+#+begin_src java
+  spring.datasource.url=jdbc:mysql://localhost:3306/runoob
+  spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+  spring.datasource.username=steiner
+  spring.datasource.password=mysql30449030
+  spring.jpa.hibernate.ddl-auto=create
+  spring.jpa.properties.hibernate.format_sql=true
+  spring.jpa.show-sql=true
+  spring.jpa.hibernate.naming.physical-strategy=org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+
+#+end_src
+
+设置 =spring.jpa.hibernate.ddl-auto=create= 后，程序启动会自动创建表
+*** User
+#+begin_src java
+  @Entity(name = "User")
+  @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
+  public class User {
+      @Id
+      @GeneratedValue(strategy = GenerationType.IDENTITY)
+      Long id;
+
+      @Column(length = 64, nullable = false)
+      String name;
+
+      @Column(length = 255, nullable = false)
+      @JsonIgnore
+      String passwordHash;
+  }
+
+#+end_src
+*** Message
+#+begin_src java
+  @Entity(name = "Message")
+  @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
+  public class Message {
+      @Id
+      @GeneratedValue(strategy = GenerationType.IDENTITY)
+      Long id;
+
+      @Column(nullable = false)
+      Long userid;
+
+      @Column(length = 64, nullable = false)
+      String username;
+
+      @Column(length = 124 * 4, nullable = false)
+      String body;
+
+      @Column(columnDefinition = "timestamp default current_timestamp", insertable = false, updatable = false)
+      @Generated(GenerationTime.INSERT)
+      Timestamp timestamp;
+  }
+
+#+end_src
+*** 请求的数据模型
+以下两个模型在接收前端数据时使用
+**** LoginRequest
+#+begin_src java
+  @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
+  public class LoginRequest implements Serializable {
+      private static final long serialVersionUID = 1L;
+
+      @NotBlank(message = "username cannot be empty")
+      @Length(min = 5, message = "username length must greater than 5")
+      String username;
+
+      @NotBlank(message = "password cannot be empty")
+      @Length(min = 8, message = "password length must greater than 8")
+      String password;
+  }
+
+#+end_src
+**** MessageRequest
+#+begin_src java
+  @Data
+  @AllArgsConstructor
+  @NoArgsConstructor
+  public class MessageRequest {
+      @NotBlank(message = "body cannot be blank")
+      @Length(min = 8, message = "body must greater than 8")
+      String body;
+  }
+
+#+end_src
+** Message 增删改查
+=MessageController= 对应一下的 URL
+1. GET /message
+2. GET /message/all
+3. POST /message
+
+#+begin_src java
+  @RestController
+  @RequestMapping("/message")
+  @Validated
+  public class MessageController {
+      @Autowired
+      UserService userService;
+      @Autowired
+      MessageService messageService;
+      @Autowired
+      JwtTokenUtil jwtTokenUtil;
+
+      @GetMapping
+      public Result<List<Message>> findMatched(HttpServletRequest request) throws LoginException {
+          String username = jwtTokenUtil.getUsernameFromRequest(request);
+          Optional<User> optionalUser = userService.findOne(username);
+          return optionalUser.map(user -> Result.Ok("messages", messageService.findAllByUserid(user.getId())))
+                  .orElseThrow(() -> new LoginException("no such user"));
+      }
+
+      @GetMapping("/all")
+      public Result<List<Message>> findAll() {
+          return Result.Ok("all messages", messageService.findAll());
+      }
+
+      @PostMapping
+      public Result<Message> insertOne(@RequestBody @Valid MessageRequest message, BindingResult result, HttpServletRequest request) throws LoginException {
+          String username = jwtTokenUtil.getUsernameFromRequest(request);
+          Optional<User> optionalUser = userService.findOne(username);
+          if(optionalUser.isPresent()) {
+              User user = optionalUser.get();
+              Long userid = user.getId();
+              Message insertMessage = new Message(null, userid, user.getName(), message.getBody(), null);
+              return Result.Ok("insert ok", messageService.insertOne(insertMessage));
+          } else {
+              throw new LoginException("in MessageController: no such user");
+          }
+      }
+  }
+
+#+end_src
+** 补充1 CORS 问题
+注意到我在 =LoginFilter= 中的一些代码里手动添加了
+#+begin_src java
+  response.setHeader("Access-Control-ALlow-Origin", "*");
+#+end_src
+
+这个不是在 =corsFilter= 中设置不就好了吗，为什么要手动设置？
+这是因为我发现，以 =token= 超过时限为例，前端再次请求时会报出 =CORS Missing= 错误，
+我查了查 =Response= 头，发现响应头里缺失 =Access-Control-Allow-Origin= ，所以才报出 =CORS missing=
+我只好先手动修改 =response= 来解决这个问题
+
+要不下次直接用 Ngnix 设置返回头？
+** 补充2 BindingResult 问题
+如果我使用这样的代码，验证错误不会被全局错误处理器 catch 到
+#+begin_src java
+  @Validated
+  public class MessageController {
+      ...
+
+      @PostMapping
+      public Result<Message> insertOne(@RequestBody @Valid MessageRequest message, HttpServletRequest request) throws LoginException {
+          String username = jwtTokenUtil.getUsernameFromRequest(request);
+          Optional<User> optionalUser = userService.findOne(username);
+          if(optionalUser.isPresent()) {
+              User user = optionalUser.get();
+              Long userid = user.getId();
+              Message insertMessage = new Message(null, userid, user.getName(), message.getBody(), null);
+              return Result.Ok("insert ok", messageService.insertOne(insertMessage));
+          } else {
+              throw new LoginException("in MessageController: no such user");
+          }
+      }
+  }
+
+#+end_src
+
+但是这样的代码没有问题
+#+begin_src java
+  @Validated
+  public class MessageController {
+      ...
+
+      @PostMapping
+      public Result<Message> insertOne(@RequestBody @Valid MessageRequest message, BindingResult result, HttpServletRequest request) throws LoginException {
+          String username = jwtTokenUtil.getUsernameFromRequest(request);
+          Optional<User> optionalUser = userService.findOne(username);
+          if(optionalUser.isPresent()) {
+              User user = optionalUser.get();
+              Long userid = user.getId();
+              Message insertMessage = new Message(null, userid, user.getName(), message.getBody(), null);
+              return Result.Ok("insert ok", messageService.insertOne(insertMessage));
+          } else {
+              throw new LoginException("in MessageController: no such user");
+          }
+      }
+  }
+
+#+end_src
+
+如果交换 =result= 和 =request= 的参数顺序，验证的错误也不会被 catch 到
+* 前端工作流程
+注意，两个前端都没有提供页面的返回功能，用户不能点击返回键退后到上一个页面
+** 登录页
+#+DOWNLOADED: screenshot @ 2022-09-09 23:39:10
+[[file:images/前端工作流程/2022-09-09_23-39-10_screenshot.png]]
+
+** 主页
+
+#+DOWNLOADED: screenshot @ 2022-09-09 23:44:17
+[[file:images/前端工作流程/2022-09-09_23-44-17_screenshot.png]]
+ps: 在选项那里还有个 logout 操作
+** token 错误处理
