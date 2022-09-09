@@ -80,7 +80,17 @@ class HomePage extends StatelessWidget {
                       title: Text("错误发生"),
                       content: Text(error.response!.data["message"]),
                       actions: [
-                        TextButton(onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst), child: Text("确认"))
+                        TextButton(
+                          child: Text("确认"),
+                          onPressed: () {
+                            if(error.response!.statusCode == 401) {
+                              Navigator.of(context).popUntil((route) => route.isFirst);
+                            } else if(error.response!.statusCode == 400) {
+                              textEditingController.text = "";
+                              Navigator.of(context).pop();
+                            }
+                          },
+                        )
                       ],
                     );
                   });
