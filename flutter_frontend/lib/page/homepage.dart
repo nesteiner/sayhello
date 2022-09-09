@@ -34,7 +34,9 @@ class HomePage extends StatelessWidget {
     return Column(
       children: [
         buildInput(context),
-        buildAllMessages(context)
+        Expanded(
+          child: buildAllMessages(context)
+        )
       ],
     );
   }
@@ -43,7 +45,9 @@ class HomePage extends StatelessWidget {
     return Column(
       children: [
         buildInput(context),
-        buildMyMessages(context)
+        Expanded(
+          child: buildMyMessages(context)
+        )
       ],
     );
   }
@@ -94,8 +98,15 @@ class HomePage extends StatelessWidget {
   Widget buildAllMessages(BuildContext context) {
     return Consumer(builder: (context, GlobalState state, child) {
       final messages = state.allMessages;
-      return Column(
-        children: messages.map<Widget>((x) => buildMessage(context, x)).toList(),
+      // return Column(
+      //   children: messages.map<Widget>((x) => buildMessage(context, x)).toList(),
+      // );
+
+      return ListView.builder(
+          itemCount: messages.length,
+          itemBuilder: (context, index) {
+              return buildMessage(context, messages[index]);
+          }
       );
 
     });
