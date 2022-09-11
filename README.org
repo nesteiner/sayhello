@@ -659,3 +659,13 @@ in =HomeView.vue=
   }
 
 #+end_src
+
+还有一点，刷新页面会发现 404 错误，这是因为我们的应用是单页面的，修改配置文件如下
+#+begin_src conf
+  location / {
+      root /home/steiner/workspace/sayhello/frontend/dist;
+      index index.html;
+      try_files $uri $uri/ /index.html;
+  }
+
+#+end_src
