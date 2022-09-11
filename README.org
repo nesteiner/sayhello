@@ -110,17 +110,39 @@
 又处理了无 =token= 时的情况
 - 默认是直接 =filterChain.doFilter(request, response);=
 如果是无 =token= 访问 =controller= 怎么办？
-在 =JwtTokenUtil= 中有一个解析函数，解析 =request= 时会抛出错误
+我们只开放了 =/authenticate= 接口，不管怎么访问其他接口，都会被 =entry point= 处理
+in =WebSecurityConfigure=
 #+begin_src java
-  public String getUsernameFromRequest(HttpServletRequest request) throws LoginException {
-      String requestToken = request.getHeader("Authorization");
-      if(requestToken == null || requestToken.equals("")) {
-          throw new LoginException("no token found");
-      }
+  http.csrf().disable()
+      .authorizeRequests().antMatchers(openUrl).permitAll()
+      .and()
+      .authorizeRequests().antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+      .anyRequest().authenticated()
+      .and()
+      .exceptionHandling().authenticationEntryPoint(entryPoint)
+      .and()
+      .sessionManagement()
+      .sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 
-      String token = requestToken.replace("Bearer ", "");
-      return getUsernameFromToken(token);
+#+end_src
+
+in =JwtAuthenticationEntryPoint=
+#+begin_src java
+  @Component
+  public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+      @Override
+      public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException {
+          response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+          response.setContentType("application/json; charset=utf-8");
+          ObjectMapper mapper = new ObjectMapper();
+          ObjectNode node = mapper.createObjectNode();
+          node.put("status", "access failed");
+          node.put("message", "in JwtAuthenticationEntryPoint: " + authException.getMessage());
+          String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+          response.getWriter().write(json);
+      }
   }
+
 #+end_src
 ** 授权流程 AuthenticateFilter
 #+begin_src java
@@ -163,23 +185,7 @@
 - 数据返回给前端
 
 其中 =UsernameNotfoundException= 交给 =JwtAuthenticationEntryPoint= 处理
-#+begin_src java
-  @Component
-  public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
-      @Override
-      public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException {
-          response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-          response.setContentType("application/json; charset=utf-8");
-          ObjectMapper mapper = new ObjectMapper();
-          ObjectNode node = mapper.createObjectNode();
-          node.put("status", "access failed");
-          node.put("message", "in JwtAuthenticationEntryPoint: " + authException.getMessage());
-          String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
-          response.getWriter().write(json);
-      }
-  }
 
-#+end_src
 ** 全局错误处理
 全局错误处理为了处理 =LoginExpection=
 #+begin_src java
@@ -558,3 +564,80 @@ in =HomeView.vue=
   )
 
 #+end_src
+
+* Nginx 设置
+我的工作环境是 Arch Linux ，在 =/etc/nginx/nginx.conf= 中，设置
+#+begin_src conf
+  user steiner;
+  worker_processes  1;
+
+  #error_log  logs/error.log;
+  #error_log  logs/error.log  notice;
+  #error_log  logs/error.log  info;
+
+  #pid        logs/nginx.pid;
+
+
+  events {
+      worker_connections  1024;
+  }
+
+
+  http {
+      include       mime.types;
+      # default_type  application/octet-stream;
+      default_type application/json;
+
+      #log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+      #                  '$status $body_bytes_sent "$http_referer" '
+      #                  '"$http_user_agent" "$http_x_forwarded_for"';
+
+      #access_log  logs/access.log  main;
+
+      sendfile        on;
+      #tcp_nopush     on;
+
+      #keepalive_timeout  0;
+      keepalive_timeout  65;
+
+      #gzip  on;
+
+      server {
+          listen       80;
+          server_name  localhost;
+
+          #charset koi8-r;
+
+          #access_log  logs/host.access.log  main;
+
+          # location / {
+          #     root   /usr/share/nginx/html;
+          #     index  index.html index.htm;
+          # }
+
+          location / {
+              root /home/steiner/workspace/sayhello/frontend/dist;
+              index index.html;
+          }
+
+          location /api {
+              proxy_pass http://localhost:8082/api;
+              add_header Access-Control-Allow-Origin * always;
+              add_header Access-Control-Allow-Methods * always;
+              add_header Access-Control-Allow-Headers * always;
+	
+          }
+
+  }
+#+end_src
+- 首先要运行 =springboot= 项目，我们的端口在 =8082=
+- 还要在前段运行 =yarn build= ，生成静态文件
+- 后端需要修改 =server.servlet.context-path=/api=
+- 前端需要修改
+  #+begin_src typescript
+    const instance = Axios.create({
+        // baseURL: "http://localhost:8082"
+        baseURL: "http://localhost/api"
+    })
+
+  #+end_src

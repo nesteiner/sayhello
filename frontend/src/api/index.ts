@@ -1,7 +1,8 @@
 import Axios from "axios";
 
 const instance = Axios.create({
-    baseURL: "http://localhost:8082"
+    // baseURL: "http://localhost:8082"
+    baseURL: "http://localhost/api"
 })
 
 const LOCAL_TOKEN_KEY = "token";
