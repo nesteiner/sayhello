@@ -50,9 +50,12 @@ public class AuthenticationController {
             if(user == null) {
                 throw new LoginException("no such user");
             } else {
-                // authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, "password"));
-                Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                if(!password.equals(user.getPassword())) {
+                    throw new LoginException("password error");
+                } else {
+                    Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         } catch (DisabledException exception) {
             throw new LoginException("user diabled");

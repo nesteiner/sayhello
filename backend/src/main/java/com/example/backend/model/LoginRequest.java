@@ -19,6 +19,5 @@ public class LoginRequest implements Serializable {
     String username;
 
     @NotBlank(message = "password cannot be blank")
-    @Length(min = 8, message = "password length must greater than 8")
     String password;
 }
